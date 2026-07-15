@@ -1,0 +1,131 @@
+{
+  "_note": "Curated seed table for the Model Registry (SPEC.md section 7). Hand-edited, not live-queried — ratings are loose approximations from public leaderboards (LMArena, Artificial Analysis, OpenRouter rankings) at the time this file was written, not a live feed. Provider adapters must NEVER write to this file: only discovery/scanner.py reads it, matching each discovered model's id/display name against `match_patterns` (case-insensitive substring match, longest pattern wins) to attach supports_coding_hint / supports_reasoning_hint. Models with no match get quality_source \"unrated\" rather than a guessed rating. Safe to hand-edit as better data becomes available.",
+  "families": [
+    {
+      "family": "Llama 4",
+      "match_patterns": ["llama-4", "llama4"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 4
+    },
+    {
+      "family": "Llama 3.3",
+      "match_patterns": ["llama-3.3", "llama3.3"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Llama 3.1",
+      "match_patterns": ["llama-3.1", "llama3.1"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Llama 3 (other)",
+      "match_patterns": ["llama-3", "llama3", "llama"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 2
+    },
+    {
+      "family": "DeepSeek R1",
+      "match_patterns": ["deepseek-r1", "deepseek r1"],
+      "supports_coding_hint": 5,
+      "supports_reasoning_hint": 5
+    },
+    {
+      "family": "DeepSeek V3",
+      "match_patterns": ["deepseek-v3", "deepseek-chat", "deepseek-coder"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 4
+    },
+    {
+      "family": "Qwen 2.5 Coder",
+      "match_patterns": ["qwen2.5-coder", "qwen-2.5-coder", "qwen-coder"],
+      "supports_coding_hint": 5,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "QwQ",
+      "match_patterns": ["qwq"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 5
+    },
+    {
+      "family": "Qwen 2.5",
+      "match_patterns": ["qwen2.5", "qwen-2.5", "qwen"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Mixtral",
+      "match_patterns": ["mixtral"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Mistral Small/7B",
+      "match_patterns": ["mistral-7b", "mistral-small", "mistral"],
+      "supports_coding_hint": 2,
+      "supports_reasoning_hint": 2
+    },
+    {
+      "family": "Gemini 2.5 Pro",
+      "match_patterns": ["gemini-2.5-pro", "gemini-2.5-flash"],
+      "supports_coding_hint": 5,
+      "supports_reasoning_hint": 5
+    },
+    {
+      "family": "Gemini 2.0",
+      "match_patterns": ["gemini-2.0", "gemini-2"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Gemini 1.5",
+      "match_patterns": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5", "gemini"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "GPT-4o",
+      "match_patterns": ["gpt-4o-mini", "gpt-4o", "openai-large", "openai-fast", "openai"],
+      "supports_coding_hint": 5,
+      "supports_reasoning_hint": 5
+    },
+    {
+      "family": "Claude 3.5/3.7 Sonnet",
+      "match_patterns": ["claude-3.5-sonnet", "claude-3-5-sonnet", "claude-3.7-sonnet", "claude-sonnet"],
+      "supports_coding_hint": 5,
+      "supports_reasoning_hint": 5
+    },
+    {
+      "family": "Claude 3 Haiku",
+      "match_patterns": ["claude-3-haiku", "claude-haiku"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Gemma 2",
+      "match_patterns": ["gemma2", "gemma-2", "gemma"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 2
+    },
+    {
+      "family": "Phi",
+      "match_patterns": ["phi-4", "phi4", "phi-3", "phi3", "phi"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Command R",
+      "match_patterns": ["command-r-plus", "command-r"],
+      "supports_coding_hint": 3,
+      "supports_reasoning_hint": 3
+    },
+    {
+      "family": "Grok",
+      "match_patterns": ["grok"],
+      "supports_coding_hint": 4,
+      "supports_reasoning_hint": 4
+    }
+  ]
+}

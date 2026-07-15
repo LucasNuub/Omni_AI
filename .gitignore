@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Backend runtime data (SQLite DB, logs) and secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+/build/
+.output/
+.vercel/
+.netlify/
+.wrangler/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

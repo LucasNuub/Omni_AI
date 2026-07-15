@@ -1,0 +1,18 @@
+{
+  "name": "Omni AI Gateway",
+  "short_name": "Omni AI",
+  "description": "Unified interface and fallback router for free AI providers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0f19",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
