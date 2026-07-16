@@ -1,113 +1,41 @@
-# Omni AI — Personal AI Gateway
+# AI Gateway & Client (Omni AI)
 
-A single OpenAI-compatible endpoint that routes chat requests across multiple
-free AI providers (Groq, Gemini, OpenRouter, Pollinations, HuggingFace,
-DeepSeek, Ollama), with automatic provider/model fallback, a self-updating
-Model Registry, and a PWA frontend. Built for personal use plus a handful of
-friends and family — sized for ~5-15 concurrent users, not millions.
+A robust, self-hosted, invite-only multi-provider AI Gateway and client application. It supports Groq, Google Gemini, OpenRouter, Pollinations, HuggingFace Inference, DeepSeek, and local Ollama integrations, equipped with automated circuit breakers, fallback failovers, and model registry capabilities.
 
-Full design spec: [`SPEC.md`](./SPEC.md).
+## Quick-Start Guide
 
-## Architecture
+Get the gateway and web client running locally in under 5 minutes:
 
+### 1. Configure the Environment
+Copy the `.env.example` template to `.env`:
+```bash
+cp .env.example .env
 ```
-Browser/PWA (SvelteKit) ──▶ FastAPI Gateway ──▶ Groq / Gemini / OpenRouter /
-                              │                  Pollinations / HuggingFace /
-                              ├─ Routing Engine   DeepSeek / Ollama (local)
-                              ├─ Model Registry
-                              ├─ Discovery Service
-                              └─ Provider Adapters
-                              SQLite (users, keys, models, requests, quota)
+Open `.env` in your editor and fill in the following:
+* **`JWT_SECRET`**: Generate a secure 32-byte secret using `openssl rand -hex 32` or type a strong custom secret.
+* **`MASTER_ENCRYPTION_KEY`**: **Leave this blank** on first start. The gateway automatically generates one, appends it to your `.env`, and outputs a warning message instructing you to back it up.
+* **`ADMIN_EMAIL`**: The email address for the initial administrative account (e.g. `admin@example.com`).
+* **`ADMIN_BOOTSTRAP_PASSWORD`**: A temporary password for the admin account (e.g., `AdminPasswordChangeMe123!`).
+
+### 2. Start the Application Network
+Spin up the backend gateway and frontend web server via Docker Compose:
+```bash
+docker compose up -d --build
 ```
+This automatically runs database migrations (`alembic upgrade head`) and starts two services:
+* **Gateway API**: Runs on `http://localhost:8000`
+* **Web Client**: Runs on `http://localhost:3000`
 
-- **Routing Engine** — three profiles (Fast / Balanced / Best quality),
-  resolved at the model level via the Model Registry, capability-aware
-  (vision / coding / reasoning). Lazy circuit breaker per provider — no
-  background polling.
-- **Model Registry** — a catalog of every discovered model merged from
-  live provider metadata and a curated capability seed table.
-- **Discovery Service** — onboarding pipeline that validates a pasted API
-  key, discovers its models, benchmarks them, and saves them to the
-  registry, all as an async background job.
-- **Provider Adapters** — one file per provider behind a common interface,
-  so adding a new provider doesn't touch the router.
+### 3. Log In & Verify
+1. Open your browser and navigate to `http://localhost:3000`.
+2. Log in using your configured **`ADMIN_EMAIL`** and **`ADMIN_BOOTSTRAP_PASSWORD`**.
+3. **Change your password immediately** after logging in by going to Settings.
+4. Onboard your first provider key (e.g., Groq or Gemini API) in **Settings**. The gateway will verify the credentials, auto-discover supported models, and benchmark latencies.
+5. Go to the **Chat** tab, select a model, and send a message!
 
-## Repo layout
+---
 
-```
-Omni AI/
-├── SPEC.md                  # full design spec
-└── ai-gateway/
-    ├── backend/              # FastAPI + SQLAlchemy 2 + Alembic (Python 3.12)
-    │   ├── app/
-    │   │   ├── api/          # route handlers (auth, chat, providers, models, admin, health)
-    │   │   ├── core/         # config, JWT/Fernet security, logging
-    │   │   ├── providers/    # ProviderAdapter interface + one adapter per provider
-    │   │   ├── discovery/    # key validation → model discovery → benchmark → save
-    │   │   ├── router/       # routing engine + circuit breaker
-    │   │   └── db/           # SQLAlchemy models + session
-    │   ├── alembic/          # DB migrations
-    │   └── tests/
-    └── frontend/             # SvelteKit PWA (chat / compare / models / providers / settings / admin)
-```
+## Folder Structure
 
-## Status
-
-Backend: auth (invite + JWT), key encryption, routing engine + circuit
-breaker, full DB schema, Model Registry, discovery pipeline, and the
-`/v1/chat/completions`, `/providers/keys`, `/models`, `/status`, `/admin/*`
-endpoints are built and tested. Image generation, `/v1/compare`, and
-Docker Compose deployment are not built yet (see section 19, "Phased
-Roadmap", in `SPEC.md`).
-
-Frontend: SvelteKit routes scaffolded (chat, compare, models, providers,
-settings, admin, login, invite) against the API contract in `SPEC.md`
-section 12.
-
-## Getting started
-
-### Backend
-
-```sh
-cd ai-gateway/backend
-python -m venv .venv
-./.venv/Scripts/activate        # Windows; use `source .venv/bin/activate` on macOS/Linux
-pip install -e ".[dev]"
-
-alembic upgrade head             # creates ./data/gateway.db
-uvicorn app.main:app --reload    # http://localhost:8000
-```
-
-`MASTER_ENCRYPTION_KEY` (for encrypting stored provider keys) is
-auto-generated into `backend/.env` on first run if not already set — back
-it up, there's no recovery path if it's lost. See `SPEC.md` section 10.
-
-Run the checks:
-
-```sh
-pytest
-ruff check .
-mypy app tests
-```
-
-### Frontend
-
-```sh
-cd ai-gateway/frontend
-npm install
-npm run dev                      # http://localhost:5173
-```
-
-Expects the backend at `http://localhost:8000` by default
-(`src/lib/api.ts`).
-
-## Tech stack
-
-**Backend:** Python 3.12, FastAPI, Pydantic v2, httpx, SQLAlchemy 2 +
-Alembic, SQLite, `cryptography` (Fernet), Structlog, pytest, Ruff, mypy
-(strict).
-
-**Frontend:** SvelteKit, TypeScript, Tailwind CSS, installable as a PWA.
-
-**Deployment (planned):** Docker Compose — gateway + web + `cloudflared`
-tunnel, no exposed ports.
+* `/backend` — FastAPI application containing provider adapters, routing/fallback engine, token-at-rest encryption pipelines, and tests.
+* `/frontend` — SvelteKit static PWA application styled with TailwindCSS (v4) and configured with an offline-capable Service Worker.
