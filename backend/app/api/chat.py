@@ -78,6 +78,14 @@ _AUTO_PROFILES: dict[str, RoutingProfile] = {
     "best": RoutingProfile.best_quality,
 }
 
+# Fields the gateway itself consumes (routing hints, not completion params).
+# ChatCompletionRequest's extra="allow" exists so pass-through completion
+# kwargs (temperature, max_tokens, ...) reach the provider verbatim — see
+# GroqAdapter.chat's payload.update(kwargs). But this is a gateway boundary:
+# a field the *client* sends for the gateway's own use must never leak into
+# the outbound provider request just because it landed in model_extra.
+_GATEWAY_ONLY_EXTRA_FIELDS = frozenset({"profile", "required_capability"})
+
 
 class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -419,7 +427,9 @@ async def create_chat_completion(
     if not candidates:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _NORMALIZED_UPSTREAM_ERROR)
 
-    extra_kwargs = dict(body.model_extra or {})
+    extra_kwargs = {
+        k: v for k, v in (body.model_extra or {}).items() if k not in _GATEWAY_ONLY_EXTRA_FIELDS
+    }
     make_invoke = _make_invoke_factory(body.messages, extra_kwargs, api_keys)
 
     try:

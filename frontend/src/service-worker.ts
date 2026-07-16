@@ -35,8 +35,19 @@ self.addEventListener('fetch', (event: any) => {
     if (event.request.method !== 'GET') return;
 
     const url = new URL(event.request.url);
-    // Don't cache API calls or hot-reloading websockets
-    if (url.origin === self.location.origin && (url.pathname.startsWith('/api') || url.pathname.startsWith('/status') || url.pathname.startsWith('/models'))) {
+
+    // The backend API lives at a different origin (host:port) than this PWA
+    // shell, so it must never be cached here — any request not aimed at this
+    // app's own static assets goes straight to the network. Previously this
+    // only excluded same-origin /api, /status, /models paths, which never
+    // matched real (cross-origin) API calls: every GET response from the
+    // backend got cached on first fetch and served stale forever after,
+    // regardless of real state changes on the server.
+    if (url.origin !== self.location.origin) return;
+
+    // Defensive: also skip these same-origin path shapes, in case the API is
+    // ever reverse-proxied through this origin in some deployment.
+    if (url.pathname.startsWith('/api') || url.pathname.startsWith('/status') || url.pathname.startsWith('/models')) {
         return;
     }
 

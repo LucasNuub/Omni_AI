@@ -33,7 +33,16 @@ def test_status_reports_healthy_provider_with_quota(
     resp = client.get("/status", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200
-    assert resp.json() == {"groq": {"healthy": True, "remaining_today": 42, "reset_at": None}}
+    assert resp.json() == {
+        "groq": {
+            "healthy": True,
+            "remaining_today": 42,
+            "limit": 100,
+            "reset_at": None,
+            "status": "green",
+            "cooling_down_until": None,
+        }
+    }
 
 
 def test_status_reports_unhealthy_provider(
@@ -49,7 +58,10 @@ def test_status_reports_unhealthy_provider(
     resp = client.get("/status", headers={"Authorization": f"Bearer {token}"})
 
     assert resp.status_code == 200
-    assert resp.json()["groq"]["healthy"] is False
+    body = resp.json()["groq"]
+    assert body["healthy"] is False
+    # Unhealthy always buckets to the red traffic-light, regardless of quota.
+    assert body["status"] == "red"
 
 
 def test_status_excludes_disabled_providers(

@@ -15,7 +15,7 @@ it (SPEC.md section 10).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -27,6 +27,7 @@ from app.core.config import Settings, get_settings
 from app.core.security import DecryptionError, decrypt_key, encrypt_key
 from app.db.models import ProviderKey as ProviderKeyRow
 from app.db.models import ProviderKeyStatus, User
+from app.db.models import QuotaUsage as QuotaUsageRow
 from app.db.session import async_session_factory, get_db
 from app.discovery.scanner import get_progress, run_discovery_pipeline
 from app.providers.registry import ADAPTERS
@@ -58,6 +59,8 @@ class ProviderKeyResponse(BaseModel):
     status: str
     added_at: datetime
     last_used_at: datetime | None
+    daily_usage_count: int
+    daily_limit: int | None
 
 
 class DiscoveryStatusResponse(BaseModel):
@@ -78,7 +81,24 @@ def _mask_stored_key(key: ProviderKeyRow, settings: Settings) -> str:
     return mask_key(plaintext) if plaintext else "(none)"
 
 
-def _to_response(key: ProviderKeyRow, settings: Settings) -> ProviderKeyResponse:
+async def _to_response(
+    db: AsyncSession, key: ProviderKeyRow, settings: Settings
+) -> ProviderKeyResponse:
+    # daily_limit isn't tracked on ProviderKey itself — it lives on today's
+    # QuotaUsage row for this key's (provider_name, user_id), same lookup
+    # chat.py's _quota_snapshot does for routing decisions.
+    quota_user_id = None if key.is_shared else key.user_id
+    result = await db.execute(
+        select(QuotaUsageRow).where(
+            QuotaUsageRow.provider_name == key.provider_name,
+            QuotaUsageRow.date == date.today(),
+            QuotaUsageRow.user_id.is_(None)
+            if quota_user_id is None
+            else QuotaUsageRow.user_id == quota_user_id,
+        )
+    )
+    quota_row = result.scalar_one_or_none()
+
     return ProviderKeyResponse(
         id=key.id,
         provider_name=key.provider_name,
@@ -89,6 +109,8 @@ def _to_response(key: ProviderKeyRow, settings: Settings) -> ProviderKeyResponse
         status=key.status.value,
         added_at=key.added_at,
         last_used_at=key.last_used_at,
+        daily_usage_count=key.daily_usage_count,
+        daily_limit=quota_row.daily_limit if quota_row else None,
     )
 
 
@@ -166,7 +188,7 @@ async def add_provider_key(
         _run_discovery_background, key_row.id, body.provider_name, body.api_key
     )
 
-    return _to_response(key_row, settings)
+    return await _to_response(db, key_row, settings)
 
 
 @router.get("/keys", response_model=list[ProviderKeyResponse])
@@ -180,7 +202,7 @@ async def list_provider_keys(
         .where(or_(ProviderKeyRow.user_id == user.id, ProviderKeyRow.is_shared.is_(True)))
         .order_by(ProviderKeyRow.added_at.desc())
     )
-    return [_to_response(key, settings) for key in result.scalars().all()]
+    return [await _to_response(db, key, settings) for key in result.scalars().all()]
 
 
 _FALLBACK_OUTCOME = {
@@ -248,7 +270,7 @@ async def rescan_provider_key(
     background_tasks.add_task(
         _run_discovery_background, key.id, key.provider_name, plaintext or None
     )
-    return _to_response(key, settings)
+    return await _to_response(db, key, settings)
 
 
 @router.delete("/keys/{key_id}", response_model=ProviderKeyResponse)
@@ -264,4 +286,4 @@ async def delete_provider_key(
     key.status = ProviderKeyStatus.revoked
     await db.commit()
     await db.refresh(key)
-    return _to_response(key, settings)
+    return await _to_response(db, key, settings)

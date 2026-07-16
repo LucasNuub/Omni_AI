@@ -5,6 +5,11 @@ export class AppState {
     token = $state<string | null>(null);
     initialized = $state<boolean>(false);
 
+    // Set whenever a live API call fails and the client silently falls back
+    // to stub/mock data, so a backend outage never looks like a working feature.
+    apiDegraded = $state<boolean>(false);
+    lastApiFailure = $state<string | null>(null);
+
     constructor() {
         if (typeof window !== 'undefined') {
             const savedToken = localStorage.getItem('token');
@@ -33,6 +38,16 @@ export class AppState {
         this.token = null;
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+    }
+
+    flagApiFallback(context: string) {
+        this.apiDegraded = true;
+        this.lastApiFailure = context;
+    }
+
+    clearApiFallback() {
+        this.apiDegraded = false;
+        this.lastApiFailure = null;
     }
 }
 

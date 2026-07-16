@@ -8,7 +8,8 @@ row) into one ``{healthy, remaining_today, reset_at}`` entry.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from app.api.chat import get_routing_engine
 from app.db.models import Provider, User
 from app.db.models import QuotaUsage as QuotaUsageRow
 from app.db.session import get_db
+from app.providers.base import QuotaStatus
 from app.providers.base import QuotaUsage as QuotaUsageSnapshot
 from app.providers.registry import ADAPTERS
 from app.router.engine import RoutingEngine
@@ -39,7 +41,27 @@ async def health() -> HealthResponse:
 class ProviderStatusEntry(BaseModel):
     healthy: bool
     remaining_today: int | None
+    limit: int | None = None
     reset_at: datetime | None = None
+    # Traffic-light bucket the frontend renders directly — computed here so
+    # every consumer (Provider Status page, Admin toggle list) agrees on one
+    # definition instead of each re-deriving thresholds from raw numbers.
+    status: Literal["green", "yellow", "red"] = "green"
+    cooling_down_until: datetime | None = None
+
+
+_YELLOW_REMAINING_RATIO = 0.25
+
+
+def _classify_status(
+    healthy: bool, quota: QuotaStatus, cooling_down_until: datetime | None
+) -> Literal["green", "yellow", "red"]:
+    if not healthy or quota.exhausted or cooling_down_until is not None:
+        return "red"
+    if quota.limit and quota.remaining is not None:
+        if (quota.remaining / quota.limit) <= _YELLOW_REMAINING_RATIO:
+            return "yellow"
+    return "green"
 
 
 async def _quota_snapshot(db: AsyncSession, provider_name: str, today: date) -> QuotaUsageSnapshot:
@@ -82,11 +104,19 @@ async def get_status(
         health_result = await adapter.health_check()
         usage = await _quota_snapshot(db, provider.name, today)
         quota = adapter.remaining_quota(usage)
+        healthy = health_result.healthy and engine.circuit_breaker.is_available(provider.name)
+
+        cooling_until = engine.circuit_breaker.cooling_down_until(provider.name)
+        if cooling_until is not None and cooling_until <= datetime.now(UTC):
+            cooling_until = None
 
         statuses[provider.name] = ProviderStatusEntry(
-            healthy=health_result.healthy and engine.circuit_breaker.is_available(provider.name),
+            healthy=healthy,
             remaining_today=quota.remaining,
+            limit=quota.limit,
             reset_at=quota.reset_at,
+            status=_classify_status(healthy, quota, cooling_until),
+            cooling_down_until=cooling_until,
         )
 
     return statuses

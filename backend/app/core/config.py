@@ -24,6 +24,11 @@ class Settings(BaseSettings):
 
     invite_expire_hours: int = 72
 
+    # Origins allowed to call the API from a browser (see main.py CORSMiddleware).
+    # The JWT is sent as an `Authorization: Bearer` header, not a cookie, so
+    # allow_credentials stays False — no origin wildcard restriction applies.
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
     # SPEC.md section 9: benchmark is capped at a sane sample size so
     # onboarding a key doesn't itself burn the day's quota.
     discovery_benchmark_sample_size: int = 10

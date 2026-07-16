@@ -43,6 +43,18 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+{#if appState.apiDegraded}
+	<div class="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-black text-sm font-semibold px-4 py-2 flex items-center justify-center gap-4 shadow-lg">
+		<span>⚠ Live API unreachable (last failure: {appState.lastApiFailure}) — showing simulated/stub data, not a real response.</span>
+		<button
+			onclick={() => appState.clearApiFallback()}
+			class="underline hover:no-underline shrink-0"
+		>
+			Dismiss
+		</button>
+	</div>
+{/if}
+
 {#if !appState.initialized}
 	<div class="fixed inset-0 bg-[#0b0f19] flex items-center justify-center">
 		<div class="flex flex-col items-center gap-4">

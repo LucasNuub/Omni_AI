@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 
 	const code = $page.params.code;
+	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let loading = $state(false);
@@ -11,7 +12,7 @@
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
-		if (!password || !confirmPassword) {
+		if (!email || !password || !confirmPassword) {
 			error = 'Please fill in all fields.';
 			return;
 		}
@@ -30,7 +31,7 @@
 		error = null;
 
 		try {
-			await api.redeemInvite(code, password);
+			await api.redeemInvite(code, email, password);
 			goto('/');
 		} catch (err: any) {
 			error = err.message || 'Failed to redeem invite.';
@@ -58,6 +59,18 @@
 	{/if}
 
 	<form onsubmit={handleSubmit} class="flex flex-col gap-5">
+		<div class="flex flex-col gap-2">
+			<label for="email" class="text-xs font-semibold text-slate-300">Email Address</label>
+			<input
+				type="email"
+				id="email"
+				bind:value={email}
+				placeholder="you@example.com"
+				class="px-4 py-3 rounded-xl bg-slate-950/50 border border-slate-800 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-200"
+				required
+			/>
+		</div>
+
 		<div class="flex flex-col gap-2">
 			<label for="password" class="text-xs font-semibold text-slate-300">Set Password</label>
 			<input 

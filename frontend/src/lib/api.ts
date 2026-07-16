@@ -10,15 +10,28 @@ export interface Model {
     model_id: string;
     display_name: string;
     supports_vision: boolean;
-    supports_coding_hint: number; // 1-5
-    supports_reasoning_hint: number; // 1-5
+    supports_coding_hint: number | null; // 1-5, null until benchmarked/curated
+    supports_reasoning_hint: number | null; // 1-5, null until benchmarked/curated
     context_length: number | null;
-    speed_rating: number; // 1-5
+    speed_rating: number | null; // 1-5, null until benchmarked
     free: boolean;
     quality_source: 'benchmarked' | 'curated' | 'unrated';
     enabled: boolean;
-    last_scanned_at: string;
+    last_scanned_at: string | null;
 }
+
+// Provider slugs the backend never names in a display-friendly way (Provider.name
+// is just the slug, e.g. "groq") — this is the one piece /status and the admin
+// toggle list need that the backend has no data for, so it's synthesized here.
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+    groq: 'Groq',
+    gemini: 'Google Gemini API',
+    openrouter: 'OpenRouter',
+    pollinations: 'Pollinations',
+    huggingface: 'HuggingFace Inference',
+    deepseek: 'DeepSeek Platform',
+    ollama: 'Ollama (local)'
+};
 
 export interface ProviderStatus {
     name: string;
@@ -34,7 +47,7 @@ export interface ProviderKey {
     id: string;
     provider_name: string;
     nickname: string;
-    encrypted_key: string; // masked form (e.g. sk-...ab12)
+    masked_key: string; // masked form (e.g. sk-...ab12) — matches backend's ProviderKeyResponse.masked_key
     is_shared: boolean;
     added_at: string;
     last_used_at: string | null;
@@ -49,6 +62,43 @@ export interface KeyStatusResponse {
     step: 'verifying_key' | 'discovering_models' | 'benchmarking' | 'done' | 'failed';
     error: string | null;
     models_added: number;
+}
+
+// Raw shape of GET /providers/keys/{id}/status — see DiscoveryStatusResponse
+// in backend/app/api/providers.py and the DiscoveryStepName/DiscoveryOutcome
+// enums in backend/app/discovery/scanner.py. Deliberately more granular
+// (per-step detail) than the UI needs — mapDiscoveryStatus() below collapses
+// it into the single {status, step} the polling UI actually consumes.
+type DiscoveryStepStatus = 'pending' | 'in_progress' | 'done' | 'failed';
+interface DiscoveryStatusResponse {
+    provider_key_id: number;
+    outcome: 'running' | 'success' | 'invalid_key' | 'error';
+    steps: Partial<Record<'verifying_key' | 'discovering_models' | 'benchmarking', DiscoveryStepStatus>>;
+    models_added: number;
+    error: string | null;
+}
+
+const DISCOVERY_STEP_ORDER = ['verifying_key', 'discovering_models', 'benchmarking'] as const;
+
+function mapDiscoveryStatus(data: DiscoveryStatusResponse): KeyStatusResponse {
+    let step: KeyStatusResponse['step'];
+    if (data.outcome === 'success') {
+        step = 'done';
+    } else if (data.outcome === 'invalid_key' || data.outcome === 'error') {
+        step = 'failed';
+    } else {
+        // Still running: report whichever step is in_progress, or the last
+        // one that finished if none currently is (brief gap between steps).
+        step =
+            DISCOVERY_STEP_ORDER.find(s => data.steps[s] === 'in_progress') ??
+            [...DISCOVERY_STEP_ORDER].reverse().find(s => data.steps[s] === 'done') ??
+            'verifying_key';
+    }
+
+    const status: KeyStatusResponse['status'] =
+        data.outcome === 'success' ? 'active' : data.outcome === 'invalid_key' ? 'invalid_key' : 'pending';
+
+    return { status, step, error: data.error, models_added: data.models_added };
 }
 
 export interface UsageRow {
@@ -82,9 +132,9 @@ const STUB_STATUS: Record<string, ProviderStatus> = {
 };
 
 let STUB_KEYS: ProviderKey[] = [
-    { id: 'k1', provider_name: 'groq', nickname: 'Family Groq Key', encrypted_key: 'gsk_...ab12', is_shared: true, added_at: '2026-07-15T10:00:00Z', last_used_at: '2026-07-15T13:20:00Z', daily_usage_count: 2000, daily_limit: 14400, health_status: 'green', status: 'active' },
-    { id: 'k2', provider_name: 'gemini', nickname: 'Personal AI Studio Key', encrypted_key: 'AIzaSy...cd34', is_shared: false, added_at: '2026-07-15T10:05:00Z', last_used_at: '2026-07-15T13:15:00Z', daily_usage_count: 550, daily_limit: 1500, health_status: 'green', status: 'active' },
-    { id: 'k3', provider_name: 'openrouter', nickname: 'Shared OpenRouter Key', encrypted_key: 'sk-or-v1...ef56', is_shared: true, added_at: '2026-07-15T10:10:00Z', last_used_at: '2026-07-15T13:22:00Z', daily_usage_count: 38, daily_limit: 50, health_status: 'yellow', status: 'active' }
+    { id: 'k1', provider_name: 'groq', nickname: 'Family Groq Key', masked_key: 'gsk_...ab12', is_shared: true, added_at: '2026-07-15T10:00:00Z', last_used_at: '2026-07-15T13:20:00Z', daily_usage_count: 2000, daily_limit: 14400, health_status: 'green', status: 'active' },
+    { id: 'k2', provider_name: 'gemini', nickname: 'Personal AI Studio Key', masked_key: 'AIzaSy...cd34', is_shared: false, added_at: '2026-07-15T10:05:00Z', last_used_at: '2026-07-15T13:15:00Z', daily_usage_count: 550, daily_limit: 1500, health_status: 'green', status: 'active' },
+    { id: 'k3', provider_name: 'openrouter', nickname: 'Shared OpenRouter Key', masked_key: 'sk-or-v1...ef56', is_shared: true, added_at: '2026-07-15T10:10:00Z', last_used_at: '2026-07-15T13:22:00Z', daily_usage_count: 38, daily_limit: 50, health_status: 'yellow', status: 'active' }
 ];
 
 let STUB_USAGE: UsageRow[] = [
@@ -92,6 +142,19 @@ let STUB_USAGE: UsageRow[] = [
     { email: 'alice@example.com', request_count: 420, last_active: '2026-07-15T13:18:00Z', total_latency_ms: 210000 },
     { email: 'bob@example.com', request_count: 110, last_active: '2026-07-15T12:55:00Z', total_latency_ms: 98000 }
 ];
+
+// Thrown when the backend was reached and responded with a real error (e.g.
+// wrong password). Distinct from a network/CORS-level failure, so callers can
+// tell "the server rejected this" apart from "the server was unreachable" —
+// only the latter should trigger a stub-data fallback.
+export class ApiHttpError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+        super(message);
+        this.name = 'ApiHttpError';
+        this.status = status;
+    }
+}
 
 // Helper to make fetch calls with headers
 async function apiRequest<T>(
@@ -117,24 +180,61 @@ async function apiRequest<T>(
 
     const response = await fetch(`${API_BASE}${endpoint}`, options);
     if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(errorText || response.statusText);
+        const raw = await response.text().catch(() => '');
+        let message = raw || response.statusText;
+        try {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed.detail === 'string') message = parsed.detail;
+        } catch {
+            // Body wasn't JSON — keep the raw text as the message.
+        }
+        throw new ApiHttpError(message, response.status);
     }
     return response.json();
+}
+
+// Every stub fallback below runs when a live call fails (network error, CORS
+// rejection, non-2xx response, etc). Flag it visibly instead of silently
+// serving mock data as if it were a real response.
+function flagStubFallback(context: string, err: unknown): void {
+    console.error(`[api] ${context} failed — falling back to stub data`, err);
+    appState.flagApiFallback(context);
+}
+
+// The gateway's JWT carries user_id/is_admin/exp (see security.py
+// create_access_token) but not email — the caller already knows the email
+// from the form it just submitted, so no /auth/me round trip is needed.
+// Decoding client-side is safe: the server verifies the signature on every
+// subsequent request, this is purely for populating local UI state.
+function decodeJwtPayload(token: string): { is_admin?: boolean } | null {
+    try {
+        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        return JSON.parse(atob(padded));
+    } catch {
+        return null;
+    }
 }
 
 export const api = {
     // Auth Endpoints
     async login(email: string, password: string): Promise<void> {
         try {
-            const data = await apiRequest<{ token: string; user: { email: string; is_admin: boolean } }>(
+            const data = await apiRequest<{ access_token: string; token_type: string }>(
                 '/auth/login',
                 'POST',
                 { email, password }
             );
-            appState.login(data.user, data.token);
-        } catch {
-            // Stub login fallback
+            const payload = decodeJwtPayload(data.access_token);
+            appState.login({ email, is_admin: payload?.is_admin ?? false }, data.access_token);
+        } catch (err) {
+            if (err instanceof ApiHttpError) {
+                // Backend was reached and rejected the credentials — a real
+                // failure, not something to paper over with a stub session.
+                throw new Error(err.message || 'Invalid email or password');
+            }
+            // Network/CORS-level failure — fall back to a local stub session for offline dev.
+            flagStubFallback('login', err);
             if (email.includes('@') && password.length >= 6) {
                 appState.login(
                     { email, is_admin: email.startsWith('admin') },
@@ -146,17 +246,25 @@ export const api = {
         }
     },
 
-    async redeemInvite(code: string, password: string): Promise<void> {
+    async redeemInvite(code: string, email: string, password: string): Promise<void> {
         try {
-            const data = await apiRequest<{ token: string; user: { email: string; is_admin: boolean } }>(
+            const data = await apiRequest<{ access_token: string; token_type: string }>(
                 '/auth/invite/redeem',
                 'POST',
-                { code, password }
+                { code, email, password }
             );
-            appState.login(data.user, data.token);
-        } catch {
+            const payload = decodeJwtPayload(data.access_token);
+            appState.login({ email, is_admin: payload?.is_admin ?? false }, data.access_token);
+        } catch (err) {
+            if (err instanceof ApiHttpError) {
+                // Backend was reached and rejected the invite (bad code, already
+                // used, expired, email taken) — a real failure, not a stub session.
+                throw new Error(err.message || 'Failed to redeem invite.');
+            }
+            // Network/CORS-level failure — fall back to a local stub session for offline dev.
+            flagStubFallback('redeemInvite', err);
             appState.login(
-                { email: 'invited-user@example.com', is_admin: false },
+                { email, is_admin: false },
                 'mock-jwt-token-' + Math.random().toString(36).substring(2)
             );
         }
@@ -170,7 +278,8 @@ export const api = {
     async getModels(): Promise<Model[]> {
         try {
             return await apiRequest<Model[]>('/models');
-        } catch {
+        } catch (err) {
+            flagStubFallback('getModels', err);
             return STUB_MODELS;
         }
     },
@@ -178,8 +287,16 @@ export const api = {
     // Provider Statuses
     async getProviderStatuses(): Promise<Record<string, ProviderStatus>> {
         try {
-            return await apiRequest<Record<string, ProviderStatus>>('/status');
-        } catch {
+            // Backend's ProviderStatusEntry has everything except a display
+            // name (Provider.name is just the slug) — fill that in locally.
+            const data = await apiRequest<Record<string, Omit<ProviderStatus, 'name'>>>('/status');
+            const withNames: Record<string, ProviderStatus> = {};
+            for (const [slug, entry] of Object.entries(data)) {
+                withNames[slug] = { ...entry, name: PROVIDER_DISPLAY_NAMES[slug] ?? slug };
+            }
+            return withNames;
+        } catch (err) {
+            flagStubFallback('getProviderStatuses', err);
             return STUB_STATUS;
         }
     },
@@ -188,7 +305,8 @@ export const api = {
     async getKeys(): Promise<ProviderKey[]> {
         try {
             return await apiRequest<ProviderKey[]>('/providers/keys');
-        } catch {
+        } catch (err) {
+            flagStubFallback('getKeys', err);
             return STUB_KEYS;
         }
     },
@@ -200,14 +318,15 @@ export const api = {
                 api_key,
                 nickname
             });
-        } catch {
+        } catch (err) {
+            flagStubFallback('addKey', err);
             const newId = 'k' + Math.random().toString(36).substring(2, 7);
             const mask = api_key.startsWith('sk-') ? 'sk-...' + api_key.slice(-4) : api_key.slice(0, 3) + '...' + api_key.slice(-4);
             const newKey: ProviderKey = {
                 id: newId,
                 provider_name,
                 nickname: nickname || `${provider_name.toUpperCase()} Key`,
-                encrypted_key: mask,
+                masked_key: mask,
                 is_shared: false,
                 added_at: new Date().toISOString(),
                 last_used_at: null,
@@ -224,8 +343,10 @@ export const api = {
     // Polling discovery status
     async getKeyDiscoveryStatus(id: string): Promise<KeyStatusResponse> {
         try {
-            return await apiRequest<KeyStatusResponse>(`/providers/keys/${id}/status`);
-        } catch {
+            const data = await apiRequest<DiscoveryStatusResponse>(`/providers/keys/${id}/status`);
+            return mapDiscoveryStatus(data);
+        } catch (err) {
+            flagStubFallback('getKeyDiscoveryStatus', err);
             // Simulate a mock progression based on date difference
             const key = STUB_KEYS.find(k => k.id === id);
             if (!key) throw new Error('Key not found');
@@ -247,7 +368,8 @@ export const api = {
     async rescanKey(id: string): Promise<void> {
         try {
             await apiRequest(`/providers/keys/${id}/rescan`, 'POST');
-        } catch {
+        } catch (err) {
+            flagStubFallback('rescanKey', err);
             const key = STUB_KEYS.find(k => k.id === id);
             if (key) {
                 key.added_at = new Date().toISOString();
@@ -259,7 +381,8 @@ export const api = {
     async deleteKey(id: string): Promise<void> {
         try {
             await apiRequest(`/providers/keys/${id}`, 'DELETE');
-        } catch {
+        } catch (err) {
+            flagStubFallback('deleteKey', err);
             STUB_KEYS = STUB_KEYS.filter(k => k.id !== id);
         }
     },
@@ -267,8 +390,18 @@ export const api = {
     // Admin Panel
     async generateInvite(): Promise<{ code: string; invite_link: string }> {
         try {
-            return await apiRequest<{ code: string; invite_link: string }>('/admin/invite', 'POST');
-        } catch {
+            // Backend's InviteResponse only returns {code, expires_at} — it has
+            // no notion of the frontend's own origin, so the link is built here.
+            const data = await apiRequest<{ code: string; expires_at: string }>(
+                '/admin/invite',
+                'POST'
+            );
+            return {
+                code: data.code,
+                invite_link: `${window.location.origin}/invite/${data.code}`
+            };
+        } catch (err) {
+            flagStubFallback('generateInvite', err);
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             return {
                 code,
@@ -280,7 +413,8 @@ export const api = {
     async getAdminUsage(): Promise<UsageRow[]> {
         try {
             return await apiRequest<UsageRow[]>('/admin/usage');
-        } catch {
+        } catch (err) {
+            flagStubFallback('getAdminUsage', err);
             return STUB_USAGE;
         }
     },
@@ -289,7 +423,8 @@ export const api = {
         try {
             const endpoint = enabled ? `/admin/provider/enable` : `/admin/provider/disable`;
             await apiRequest(endpoint, 'POST', { provider_name: name });
-        } catch {
+        } catch (err) {
+            flagStubFallback('toggleProvider', err);
             const prov = STUB_STATUS[name];
             if (prov) {
                 prov.healthy = enabled;
@@ -351,7 +486,8 @@ export const api = {
                     }
                 }
             }
-        } catch {
+        } catch (err) {
+            flagStubFallback('chatCompletion', err);
             // Rich fallback stream simulation
             const model = STUB_MODELS.find(m => m.model_id === modelId) || STUB_MODELS[0];
             const sampleResponses = [
@@ -377,7 +513,8 @@ export const api = {
                 prompt,
                 model: modelId
             });
-        } catch {
+        } catch (err) {
+            flagStubFallback('generateImage', err);
             // Wait to simulate image generation
             await new Promise(resolve => setTimeout(resolve, 2000));
             // Return Pollinations AI's direct generation URL as a premium working result!

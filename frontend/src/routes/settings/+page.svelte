@@ -319,7 +319,7 @@
 							</td>
 							<!-- Masked Key -->
 							<td class="py-4 px-4 font-mono text-slate-400">
-								{key.encrypted_key}
+								{key.masked_key}
 							</td>
 							<!-- Usage -->
 							<td class="py-4 px-4 font-mono text-slate-200">

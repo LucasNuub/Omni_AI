@@ -293,6 +293,63 @@ def test_chat_uses_shared_provider_key_when_available(
     assert captured_kwargs.get("api_key") == "sk-shared-test-key"
 
 
+def test_chat_gateway_only_extra_fields_never_reach_provider(
+    client: TestClient,
+    make_user: MakeUser,
+    only_providers_enabled: OnlyProvidersEnabled,
+    seed_model: SeedModel,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``profile`` is a gateway-internal routing hint, not a completion param.
+
+    ChatCompletionRequest's extra="allow" exists so legitimate pass-through
+    completion kwargs (e.g. temperature) reach the provider verbatim — but a
+    field the gateway itself consumes (or would, if the client had used
+    "auto:<profile>" instead of a literal model id) must never leak into the
+    outbound provider payload just because it landed in model_extra. This
+    reproduces the real bug: Groq's API rejects an unrecognized "profile"
+    property with a 400.
+    """
+    only_providers_enabled({"pollinations"})
+    seed_model("pollinations", "extra-fields-model")
+
+    captured_kwargs: dict[str, Any] = {}
+
+    class _KwargsCapturingAdapter(FakeAdapter):
+        async def chat(
+            self, messages: list[Message], model_id: str, **kwargs: Any
+        ) -> AsyncIterator[ChatChunk]:
+            captured_kwargs.update(kwargs)
+            async for chunk in super().chat(messages, model_id, **kwargs):
+                yield chunk
+
+    monkeypatch.setitem(
+        ADAPTERS,
+        "pollinations",
+        _KwargsCapturingAdapter(
+            name="pollinations", chat_chunks=[ChatChunk(delta="ok", finish_reason="stop")]
+        ),
+    )
+    _, token = make_user("chat-extrafields@example.com")
+
+    resp = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "extra-fields-model",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": False,
+            "profile": "balanced",
+            "temperature": 0.7,
+        },
+        headers=_auth_headers(token),
+    )
+
+    assert resp.status_code == 200
+    assert "profile" not in captured_kwargs
+    # Legitimate pass-through completion params must still reach the provider.
+    assert captured_kwargs.get("temperature") == 0.7
+
+
 # --- "model" field resolution: auto:* profiles, specific model_id, 400 -------------------
 
 
