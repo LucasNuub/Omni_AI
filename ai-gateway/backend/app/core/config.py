@@ -19,6 +19,9 @@ class Settings(BaseSettings):
 
     master_encryption_key: str | None = None
 
+    admin_email: str | None = None
+    admin_bootstrap_password: str | None = None
+
     invite_expire_hours: int = 72
 
     # SPEC.md section 9: benchmark is capped at a sane sample size so

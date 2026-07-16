@@ -57,10 +57,17 @@ def load_or_create_master_key(settings: Settings, env_path: Path = Path(".env"))
     _persist_master_key(env_path, key)
 
     warning = (
-        "No MASTER_ENCRYPTION_KEY was configured — generated a new one.\n"
-        f"  MASTER_ENCRYPTION_KEY={key}\n"
-        "BACK THIS UP. If it is lost, every stored provider key must be "
-        "re-entered — there is no recovery path by design."
+        "\n======================================================================\n"
+        "CRITICAL SECURITY WARNING: NO MASTER_ENCRYPTION_KEY CONFIGURED!\n"
+        "----------------------------------------------------------------------\n"
+        "A temporary MASTER_ENCRYPTION_KEY has been generated for this run:\n\n"
+        f"  MASTER_ENCRYPTION_KEY={key}\n\n"
+        "YOU MUST COPY THIS KEY AND PASTE IT INTO YOUR HOST'S `.env` FILE:\n"
+        f"  MASTER_ENCRYPTION_KEY={key}\n\n"
+        "If you do not persist this key in your host's `.env`, a new one will be\n"
+        "generated on every container restart, which will permanently CORRUPT and\n"
+        "render all previously saved provider API keys undecryptable.\n"
+        "======================================================================\n"
     )
     logger.warning(warning)
     print(warning)  # noqa: T201 - deliberate one-time operator-facing notice
@@ -71,11 +78,14 @@ def load_or_create_master_key(settings: Settings, env_path: Path = Path(".env"))
 
 def _persist_master_key(env_path: Path, key: str) -> None:
     line = f"MASTER_ENCRYPTION_KEY={key}\n"
-    if env_path.exists():
-        with env_path.open("a", encoding="utf-8") as f:
-            f.write(line)
-    else:
-        env_path.write_text(line, encoding="utf-8")
+    try:
+        if env_path.exists():
+            with env_path.open("a", encoding="utf-8") as f:
+                f.write(line)
+        else:
+            env_path.write_text(line, encoding="utf-8")
+    except Exception as e:
+        logger.warning(f"Could not persist generated key to local container .env: {e}")
 
 
 def _fernet(master_key: str | None) -> Fernet:

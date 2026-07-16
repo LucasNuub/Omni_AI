@@ -16,6 +16,7 @@ from app.api import admin, auth, chat, health, models, providers
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.security import load_or_create_master_key
+from app.db.bootstrap import ensure_admin_bootstrapped
 from app.db.session import async_session_factory
 from app.providers.registry import ensure_providers_seeded
 from app.router.circuit_breaker import CircuitBreaker
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.routing_engine = RoutingEngine(circuit_breaker=CircuitBreaker())
     async with async_session_factory() as session:
         await ensure_providers_seeded(session)
+        await ensure_admin_bootstrapped(session, settings)
     yield
 
 
